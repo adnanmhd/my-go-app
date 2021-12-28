@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"math/rand"
 	"my-go-app/model"
 	"net/http"
 	"strconv"
@@ -29,9 +31,8 @@ var (
 
 func initDB() {
 	var err error
-	dataSourceName := "root:@tcp(localhost:3306)/apps_db?parseTime=True"
+	dataSourceName := "root:@tcp(localhost:3306)/apps_db?parseTime=True&loc=Asia%2FJakarta"
 	db, err = gorm.Open("mysql", dataSourceName)
-
 	if err != nil {
 		fmt.Println(err)
 		panic("failed to connect database")
@@ -142,6 +143,41 @@ func deleteMenu(c echo.Context) error {
 	})
 }
 
+func addTransaction(c echo.Context) error {
+	db.SingularTable(true)
+	billTrx := model.BillTransaction{}
+	billTrx.Id = uuid.NewString()
+	time.Now().Local().Zone()
+	billTrx.CreatedDate = time.Now()
+	billTrx.BillCode = getBillCode()
+	if err := c.Bind(&billTrx); err != nil {
+		return err
+	}
+	err := db.Create(&billTrx).Error
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err)
+	}
+	return c.JSON(http.StatusOK, billTrx)
+}
+
+func getTransactions(c echo.Context) error {
+	db.SingularTable(true)
+	var billTrx []*model.BillTransaction
+	if err := db.Preload("BillTransactionDtl").Find(&billTrx).Error; err != nil {
+		// error handling here
+		return err
+	}
+	return c.JSON(http.StatusOK, billTrx)
+}
+
+func getBillCode() string {
+	var billCode bytes.Buffer
+	currentTime := time.Now()
+	billCode.WriteString(currentTime.Format("02012006"))
+	billCode.WriteString(strconv.Itoa(rand.Intn(200)))
+	return billCode.String()
+}
+
 func main() {
 	e := echo.New()
 
@@ -159,6 +195,8 @@ func main() {
 	e.GET("/menus/:id", getMenuById)
 	e.POST("/menus", addMenu)
 	e.DELETE("/menus/:id", deleteMenu)
+	e.POST("/transactions", addTransaction)
+	e.GET("/transactions", getTransactions)
 	initDB()
 
 	// Start server
