@@ -1,19 +1,21 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"math/rand"
 	"my-go-app/model"
+	"my-go-app/utils"
 	"net/http"
 	"strconv"
 	"time"
+
+	common "my-go-app/common"
+	controller "my-go-app/controller"
 
 	"github.com/google/uuid"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/tylerb/graceful"
 )
 
 type (
@@ -149,7 +151,7 @@ func addTransaction(c echo.Context) error {
 	billTrx.Id = uuid.NewString()
 	time.Now().Local().Zone()
 	billTrx.CreatedDate = time.Now()
-	billTrx.BillCode = getBillCode()
+	billTrx.BillCode = utils.GenerateBillCode()
 	if err := c.Bind(&billTrx); err != nil {
 		return err
 	}
@@ -170,35 +172,12 @@ func getTransactions(c echo.Context) error {
 	return c.JSON(http.StatusOK, billTrx)
 }
 
-func getBillCode() string {
-	var billCode bytes.Buffer
-	currentTime := time.Now()
-	billCode.WriteString(currentTime.Format("02012006"))
-	billCode.WriteString(strconv.Itoa(rand.Intn(200)))
-	return billCode.String()
-}
-
 func main() {
 	e := echo.New()
-
-	// Middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-
-	// Routes
-	e.GET("/users", getAllUsers)
-	e.POST("/users", createUser)
-	e.GET("/users/:id", getUser)
-	e.PUT("/users/:id", updateUser)
-	e.DELETE("/users/:id", deleteUser)
-	e.GET("/menus", getMenus)
-	e.GET("/menus/:id", getMenuById)
-	e.POST("/menus", addMenu)
-	e.DELETE("/menus/:id", deleteMenu)
-	e.POST("/transactions", addTransaction)
-	e.GET("/transactions", getTransactions)
-	initDB()
-
+	common.InitConfig()
+	common.GetInstanceDb()
+	controller.AssignRouting(e)
+	e.Server.Addr = common.Config.Port
+	graceful.ListenAndServe(e.Server, 5*time.Second)
 	// Start server
-	e.Logger.Fatal(e.Start(":1323"))
 }
